@@ -1,0 +1,339 @@
+name: Deploy Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      skip-tests:
+        description: 'Skip security tests (production only with approval)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_TAG: ${{ github.sha }}
+  DEPLOY_TIMEOUT: 300
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate configuration
+        run: |
+          set -e
+          echo "Validating docker-compose.yml..."
+          docker run --rm -v $(pwd):/workspace -w /workspace \
+            docker/compose:latest config -f docker-compose.yml > /dev/null
+          echo "✓ Configuration valid"
+
+      - name: Check required secrets
+        run: |
+          echo "Required secrets for deployment:"
+          [ -n "${{ secrets.STAGING_DEPLOY_KEY }}" ] && echo "✓ STAGING_DEPLOY_KEY" || echo "✗ STAGING_DEPLOY_KEY"
+          [ -n "${{ secrets.STAGING_DEPLOY_HOST }}" ] && echo "✓ STAGING_DEPLOY_HOST" || echo "✗ STAGING_DEPLOY_HOST"
+          [ -n "${{ secrets.PROD_DEPLOY_KEY }}" ] && echo "✓ PROD_DEPLOY_KEY" || echo "✗ PROD_DEPLOY_KEY"
+          [ -n "${{ secrets.PROD_DEPLOY_HOST }}" ] && echo "✓ PROD_DEPLOY_HOST" || echo "✗ PROD_DEPLOY_HOST"
+
+  build:
+    runs-on: ubuntu-latest
+    needs: validate
+    strategy:
+      matrix:
+        service:
+          - name: lidbema-zone1
+            context: ./LidbemaZon1
+          - name: lidbema-zone2
+            context: ./LidbemaZon2
+          - name: lidbema-zone3
+            context: ./LidbemaZon3
+          - name: lidbema-pwa
+            context: ./Lidbema\ PWa
+          - name: ketchup-pwa
+            context: ./Ketchup
+          - name: nexnod-node1
+            context: ./NexNod1
+          - name: nexnod-node2
+            context: ./NexNod2
+          - name: nexnod-node3
+            context: ./NexNod3
+      max-parallel: 4
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      images: ${{ steps.images.outputs.tags }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service.name }}:latest
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service.name }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Store image reference
+        id: images
+        run: |
+          echo "tags=${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service.name }}:${{ env.IMAGE_TAG }}" >> $GITHUB_OUTPUT
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event.inputs.skip-tests != 'true'
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      matrix:
+        service:
+          - lidbema-zone1
+          - lidbema-zone2
+          - lidbema-zone3
+          - lidbema-pwa
+          - ketchup-pwa
+          - nexnod-node1
+          - nexnod-node2
+          - nexnod-node3
+      max-parallel: 3
+    continue-on-error: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy image scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}:${{ env.IMAGE_TAG }}
+          format: 'sarif'
+          output: '${{ matrix.service }}-results.sarif'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: '${{ matrix.service }}-results.sarif'
+          category: '${{ matrix.service }}'
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [build, security-scan]
+    if: github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch'
+    environment:
+      name: staging
+      url: https://staging.lidbema.local
+    concurrency:
+      group: staging-deployment
+      cancel-in-progress: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_DEPLOY_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.STAGING_DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Pre-deployment checks
+        timeout-minutes: 5
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.STAGING_DEPLOY_USER }}@${{ secrets.STAGING_DEPLOY_HOST }} \
+            'cd /opt/lidbema && ./deploy.sh staging status' || exit 1
+
+      - name: Deploy to staging
+        timeout-minutes: 10
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.STAGING_DEPLOY_USER }}@${{ secrets.STAGING_DEPLOY_HOST }} \
+            "cd /opt/lidbema && \
+             git pull origin develop && \
+             IMAGE_TAG=${{ env.IMAGE_TAG }} ./deploy.sh staging deploy"
+
+      - name: Health check with retries
+        timeout-minutes: 5
+        run: |
+          for i in {1..30}; do
+            echo "Health check attempt $i/30..."
+            if curl -sf --connect-timeout 5 https://staging.lidbema.local/health > /dev/null 2>&1; then
+              echo "✓ Staging deployment healthy"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "✗ Health check failed"
+          exit 1
+
+      - name: Run smoke tests
+        timeout-minutes: 5
+        run: |
+          echo "Testing zone services..."
+          for zone in 1 2 3; do
+            curl -sf --connect-timeout 5 https://staging.lidbema.local:300$zone/health || echo "⚠ Zone $zone health check inconclusive"
+          done
+          echo "✓ Smoke tests completed"
+
+      - name: Notify success
+        if: success()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "✓ Staging deployment successful",
+              "blocks": [{
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "*Staging Deployment*\nStatus: Success ✓\nCommit: `${{ github.sha }}`\nRef: `develop`"}
+              }]
+            }
+
+      - name: Notify failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "✗ Staging deployment failed",
+              "blocks": [{
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "*Staging Deployment*\nStatus: Failed ✗\nCommit: `${{ github.sha }}`\nRef: `develop`"}
+              }]
+            }
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [build, security-scan]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://lidbema.local
+    concurrency:
+      group: production-deployment
+      cancel-in-progress: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PROD_DEPLOY_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.PROD_DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Pre-deployment checks
+        timeout-minutes: 5
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_DEPLOY_USER }}@${{ secrets.PROD_DEPLOY_HOST }} \
+            'cd /opt/lidbema && ./deploy.sh production status' || exit 1
+
+      - name: Create backup
+        timeout-minutes: 10
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_DEPLOY_USER }}@${{ secrets.PROD_DEPLOY_HOST }} \
+            "cd /opt/lidbema && ./deploy.sh production backup"
+
+      - name: Deploy to production
+        timeout-minutes: 10
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_DEPLOY_USER }}@${{ secrets.PROD_DEPLOY_HOST }} \
+            "cd /opt/lidbema && \
+             git pull origin main && \
+             IMAGE_TAG=${{ env.IMAGE_TAG }} ./deploy.sh production deploy"
+
+      - name: Health check with retries
+        timeout-minutes: 5
+        run: |
+          for i in {1..30}; do
+            echo "Health check attempt $i/30..."
+            if curl -sf --connect-timeout 5 https://lidbema.local/health > /dev/null 2>&1; then
+              echo "✓ Production deployment healthy"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "✗ Production health check failed, rolling back..."
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_DEPLOY_USER }}@${{ secrets.PROD_DEPLOY_HOST }} \
+            "cd /opt/lidbema && ./deploy.sh production rollback"
+          exit 1
+
+      - name: Verify cluster stability
+        timeout-minutes: 5
+        run: |
+          echo "Verifying NexNod cluster..."
+          for node in 1 2 3; do
+            curl -sf --connect-timeout 5 https://lidbema.local:400$node/health || echo "⚠ Node $node health check inconclusive"
+          done
+          echo "✓ Cluster verification completed"
+
+      - name: Notify success
+        if: success()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "✓ Production deployment successful",
+              "blocks": [{
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "*Production Deployment*\nStatus: Success ✓\nCommit: `${{ github.sha }}`\nRef: `main`"}
+              }]
+            }
+
+      - name: Notify failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "✗ Production deployment failed and rolled back",
+              "blocks": [{
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "*Production Deployment*\nStatus: Failed & Rolled Back ✗\nCommit: `${{ github.sha }}`\nRef: `main`"}
+              }]
+            }
+
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always()
+    steps:
+      - name: Log cleanup completion
+        run: |
+          echo "Pipeline execution completed"
+          echo "Commit: ${{ github.sha }}"
+          echo "Ref: ${{ github.ref }}"

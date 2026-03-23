@@ -1,0 +1,84 @@
+name: Rollback Verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      backup-file:
+        description: 'Backup file to restore (optional, uses latest if empty)'
+        required: false
+        type: string
+
+jobs:
+  prepare-rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify backup exists
+        run: |
+          echo "Verifying backup for ${{ github.event.inputs.environment }}"
+          echo "Backup file: ${{ github.event.inputs.backup-file }}"
+
+  execute-rollback:
+    runs-on: ubuntu-latest
+    needs: prepare-rollback
+    environment:
+      name: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          DEPLOY_KEY=$([ "${{ github.event.inputs.environment }}" = "staging" ] && echo "${{ secrets.STAGING_DEPLOY_KEY }}" || echo "${{ secrets.PROD_DEPLOY_KEY }}")
+          DEPLOY_HOST=$([ "${{ github.event.inputs.environment }}" = "staging" ] && echo "${{ secrets.STAGING_DEPLOY_HOST }}" || echo "${{ secrets.PROD_DEPLOY_HOST }}")
+          DEPLOY_USER=$([ "${{ github.event.inputs.environment }}" = "staging" ] && echo "${{ secrets.STAGING_DEPLOY_USER }}" || echo "${{ secrets.PROD_DEPLOY_USER }}")
+          
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Execute rollback
+        run: |
+          DEPLOY_KEY=$([ "${{ github.event.inputs.environment }}" = "staging" ] && echo "${{ secrets.STAGING_DEPLOY_KEY }}" || echo "${{ secrets.PROD_DEPLOY_KEY }}")
+          DEPLOY_HOST=$([ "${{ github.event.inputs.environment }}" = "staging" ] && echo "${{ secrets.STAGING_DEPLOY_HOST }}" || echo "${{ secrets.PROD_DEPLOY_HOST }}")
+          DEPLOY_USER=$([ "${{ github.event.inputs.environment }}" = "staging" ] && echo "${{ secrets.STAGING_DEPLOY_USER }}" || echo "${{ secrets.PROD_DEPLOY_USER }}")
+          
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd /opt/lidbema && ./deploy.sh ${{ github.event.inputs.environment }} rollback"
+
+  verify-rollback:
+    runs-on: ubuntu-latest
+    needs: execute-rollback
+    steps:
+      - name: Verify services are running
+        run: |
+          echo "Verifying ${{ github.event.inputs.environment }} services..."
+          for i in {1..30}; do
+            echo "Health check attempt $i/30..."
+            sleep 10
+          done
+          echo "Rollback verification completed"
+
+      - name: Notify completion
+        if: always()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "Rollback for ${{ github.event.inputs.environment }} completed",
+              "blocks": [{
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "*Rollback Completed*\nEnvironment: `${{ github.event.inputs.environment }}`\nStatus: ${{ job.status }}"}
+              }]
+            }

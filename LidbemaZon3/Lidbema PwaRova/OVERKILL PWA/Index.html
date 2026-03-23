@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Lidbema Overkill - Zon 3</title>
+    
+    <link rel="manifest" href="manifest.json">
+    
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+    <style>
+        :root {
+            --neon-cyan: #00FFFF;
+            --neon-red: #FF0000;
+            --neon-green: #00FF00;
+        }
+
+        body {
+            background-color: #000;
+            color: var(--neon-cyan);
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0; 
+            padding: 20px;
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            height: 100vh;
+            overflow: hidden; 
+            text-shadow: 0 0 5px var(--neon-cyan);
+            transition: box-shadow 0.3s ease-out;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 5px;
+        }
+
+        .fingerprint-btn {
+            background: transparent;
+            border: 2px solid var(--neon-cyan);
+            color: var(--neon-cyan);
+            padding: 20px 40px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 0 0 15px var(--neon-cyan) inset;
+            transition: all 0.2s;
+            margin-top: 20px;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+        }
+
+        .fingerprint-btn:active { 
+            background: var(--neon-cyan); 
+            color: #000; 
+        }
+
+        #reader {
+            width: 100%; 
+            max-width: 400px; 
+            display: none; 
+            border: 2px solid var(--neon-cyan); 
+            box-shadow: 0 0 20px var(--neon-cyan);
+            margin-top: 20px;
+        }
+
+        #log { 
+            margin-top: 20px; 
+            width: 100%; 
+            max-width: 500px; 
+            height: 200px; 
+            border: 1px solid var(--neon-cyan); 
+            padding: 10px; 
+            overflow-y: auto; 
+            font-size: 0.9rem;
+            background: rgba(0, 255, 255, 0.05);
+            box-sizing: border-box;
+        }
+
+        #statusText {
+            font-size: 1.2rem;
+            margin-top: 10px;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Lidbema Digital</h1>
+    <div id="statusText">AWAITING ARCHITECT FINGERPRINT</div>
+
+    <button id="bootBtn" class="fingerprint-btn" onclick="triggerBoot()">
+        [ INITIATE OVERKILL ]
+    </button>
+
+    <div id="reader"></div>
+
+    <button id="startScanBtn" class="fingerprint-btn" style="display: none;" onclick="initiateCameraScanner()">
+        [ AKTIVERA OPTISK MATRIS ]
+    </button>
+
+    <div id="log">[SYSTEM] Redo för inloggning...</div>
+
+    <script>
+        // ============================================================================
+        // 1. PWA SERVICE WORKER REGISTRERING
+        // ============================================================================
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(() => console.log('[SYSTEM] Service Worker Online.'))
+                    .catch(err => console.error('[SYSTEM] SW Fel:', err));
+            });
+        }
+
+        // ============================================================================
+        // 2. ROVA OVERKILL BOOT SEKVENS
+        // ============================================================================
+        async function triggerBoot() {
+            const logDiv = document.getElementById('log');
+            const bootBtn = document.getElementById('bootBtn');
+            
+            bootBtn.style.display = 'none'; // Dölj boot-knappen
+            logDiv.innerText += "\n[*] Inleder Overkill Protocol...";
+            
+            try {
+                // Haptisk feedback: Vibration som simulerar en motor som startar
+                if (navigator.vibrate) navigator.vibrate([30, 50, 30, 50, 500, 1500]);
+                
+                document.getElementById('statusText').innerText = "ZON 3 IS YOURS.";
+                document.body.style.boxShadow = "inset 0 0 100px #00FFFF";
+                
+                logDiv.innerText += "\n[✅] WELCOME, J_ROVA.";
+                logDiv.innerText += "\n[⚡] Ruttoptimerare: Länkad.";
+                logDiv.innerText += "\n[⚡] Hårdvarubrygga: Aktiv.";
+                
+                // Visa skanner-knappen
+                setTimeout(() => {
+                    document.getElementById('startScanBtn').style.display = 'block';
+                    logDiv.scrollTop = logDiv.scrollHeight; // Auto-scroll
+                }, 1000);
+                
+            } catch (e) {
+                logDiv.innerText += "\n[❌] Kritiskt fel vid boot.";
+            }
+        }
+
+        // ============================================================================
+        // 3. OPTISK SKANNER OCH "MÄSTARE-LOOP" LOGIK
+        // ============================================================================
+        let html5QrCode;
+
+        function initiateCameraScanner() {
+            const readerDiv = document.getElementById('reader');
+            const scanBtn = document.getElementById('startScanBtn');
+            const logDiv = document.getElementById('log');
+            
+            readerDiv.style.display = 'block';
+            scanBtn.style.display = 'none'; // Dölj knappen medan kameran är igång
+            
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            logDiv.innerText += "\n[SYSTEM] Länkar optisk matris (kamera)...";
+            logDiv.scrollTop = logDiv.scrollHeight;
+
+            html5QrCode = new Html5Qrcode("reader");
+            const config = { 
+                fps: 15, 
+                qrbox: { width: 250, height: 150 },
+                aspectRatio: 1.777778
+            };
+
+            html5QrCode.start(
+                { facingMode: "environment" }, // Använd bakre kameran
+                config, 
+                onScanSuccess, 
+                (err) => { /* Tyst felsökning */ }
+            ).catch((err) => {
+                logDiv.innerText += "\n[FEL] Kamera ej tillgänglig. Säkerställ HTTPS.";
+                scanBtn.style.display = 'block'; // Visa knappen igen om det misslyckas
+            });
+        }
+
+        function onScanSuccess(decodedText) {
+            // Stoppa skannern direkt vid träff
+            html5QrCode.stop().then(() => {
+                document.getElementById('reader').style.display = 'none';
+                
+                // Generera en slumpmässig "AI Score" för att demonstrera logiken (98.0 till 100.0)
+                const mockConfidence = (Math.random() * 2 + 98).toFixed(1);
+                
+                const mockScanResult = {
+                    article_id: decodedText,
+                    ai_score: parseFloat(mockConfidence)
+                };
+
+                // Kör Lidbemas logik! (Vi antar 'LVL_1' användare för testet)
+                processAiScan(mockScanResult, 'LVL_1');
+            });
+        }
+
+        function processAiScan(scanResult, userLevel) {
+            const confidence = scanResult.ai_score; 
+            const partId = scanResult.article_id;   
+            const logDiv = document.getElementById('log');
+
+            // EXPRESS-LÄGE (Hög säkerhet)
+            if (userLevel === 'LVL_1' && confidence >= 99.5) {
+                if (navigator.vibrate) navigator.vibrate([50, 50, 50]); 
+                
+                document.body.style.boxShadow = "inset 0 0 100px var(--neon-green)";
+                setTimeout(() => document.body.style.boxShadow = "inset 0 0 100px var(--neon-cyan)", 400);
+                
+                logDiv.innerText += `\n[✅ EXPRESS] Artikel ${partId} säkrad. Precision: ${confidence}%`;
+            } 
+            // MÄSTARE-LOOP (Kräver manuell koll)
+            else {
+                if (navigator.vibrate) navigator.vibrate(600);
+                
+                document.body.style.boxShadow = "inset 0 0 100px var(--neon-red)";
+                setTimeout(() => document.body.style.boxShadow = "inset 0 0 100px var(--neon-cyan)", 600);
+
+                logDiv.innerText += `\n[⚠️ VARNING] Låg AI-Score (${confidence}%). Manuell verifiering krävs för ${partId}.`;
+            }
+
+            logDiv.scrollTop = logDiv.scrollHeight;
+
+            // Gör redo för nästa skanning efter 2 sekunder
+            setTimeout(() => {
+                document.getElementById('startScanBtn').style.display = 'block';
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

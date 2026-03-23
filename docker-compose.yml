@@ -1,0 +1,317 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # LIDBEMA ZONE SERVICES
+  # ============================================================================
+  lidbema-zone1:
+    build:
+      context: ./LidbemaZon1
+      dockerfile: Dockerfile
+    container_name: lidbema-zone1
+    environment:
+      - NODE_ENV=production
+      - ZONE_ID=zone-1
+      - LOG_LEVEL=info
+      - METRICS_PORT=9001
+    ports:
+      - "3001:3000"
+      - "9001:9001"
+    networks:
+      - lidbema-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - lidbema-zone1-logs:/app/logs
+    labels:
+      - "app=lidbema"
+      - "zone=1"
+
+  lidbema-zone2:
+    build:
+      context: ./LidbemaZon2
+      dockerfile: Dockerfile
+    container_name: lidbema-zone2
+    environment:
+      - NODE_ENV=production
+      - ZONE_ID=zone-2
+      - LOG_LEVEL=info
+      - METRICS_PORT=9002
+    ports:
+      - "3002:3000"
+      - "9002:9001"
+    networks:
+      - lidbema-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - lidbema-zone2-logs:/app/logs
+    labels:
+      - "app=lidbema"
+      - "zone=2"
+
+  lidbema-zone3:
+    build:
+      context: ./LidbemaZon3
+      dockerfile: Dockerfile
+    container_name: lidbema-zone3
+    environment:
+      - NODE_ENV=production
+      - ZONE_ID=zone-3
+      - LOG_LEVEL=info
+      - METRICS_PORT=9003
+    ports:
+      - "3003:3000"
+      - "9003:9001"
+    networks:
+      - lidbema-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - lidbema-zone3-logs:/app/logs
+    labels:
+      - "app=lidbema"
+      - "zone=3"
+
+  lidbema-pwa:
+    build:
+      context: ./Lidbema PWa
+      dockerfile: Dockerfile
+    container_name: lidbema-pwa
+    environment:
+      - NODE_ENV=production
+      - ZONE_1_URL=http://lidbema-zone1:3000
+      - ZONE_2_URL=http://lidbema-zone2:3000
+      - ZONE_3_URL=http://lidbema-zone3:3000
+      - LOG_LEVEL=info
+    ports:
+      - "3000:3000"
+      - "9000:9001"
+    networks:
+      - lidbema-network
+    restart: unless-stopped
+    depends_on:
+      - lidbema-zone1
+      - lidbema-zone2
+      - lidbema-zone3
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - lidbema-pwa-logs:/app/logs
+    labels:
+      - "app=lidbema"
+      - "service=pwa"
+
+  # ============================================================================
+  # KETCHUP PMS - Rova Edition
+  # ============================================================================
+  ketchup-pwa:
+    build:
+      context: ./Ketchup
+      dockerfile: Dockerfile
+    container_name: ketchup-pwa
+    environment:
+      - NODE_ENV=production
+    ports:
+      - "3050:3050"
+    networks:
+      - ketchup-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3050/Index.html"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "app=ketchup"
+      - "service=pwa"
+
+  # ============================================================================
+  # NEXNOD CLUSTER NODES
+  # ============================================================================
+  nexnod-node1:
+    build:
+      context: ./NexNod1
+      dockerfile: Dockerfile
+    container_name: nexnod-node1
+    environment:
+      - NODE_ENV=production
+      - NODE_ID=nexnod-1
+      - CLUSTER_PEERS=nexnod-node2:9001,nexnod-node3:9001
+      - LOG_LEVEL=info
+      - METRICS_PORT=9101
+    ports:
+      - "4001:4000"
+      - "9101:9101"
+    networks:
+      - nexnod-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - nexnod-node1-data:/app/data
+      - nexnod-node1-logs:/app/logs
+    labels:
+      - "app=nexnod"
+      - "node=1"
+
+  nexnod-node2:
+    build:
+      context: ./NexNod2
+      dockerfile: Dockerfile
+    container_name: nexnod-node2
+    environment:
+      - NODE_ENV=production
+      - NODE_ID=nexnod-2
+      - CLUSTER_PEERS=nexnod-node1:9001,nexnod-node3:9001
+      - LOG_LEVEL=info
+      - METRICS_PORT=9102
+    ports:
+      - "4002:4000"
+      - "9102:9102"
+    networks:
+      - nexnod-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - nexnod-node2-data:/app/data
+      - nexnod-node2-logs:/app/logs
+    labels:
+      - "app=nexnod"
+      - "node=2"
+
+  nexnod-node3:
+    build:
+      context: ./NexNod3
+      dockerfile: Dockerfile
+    container_name: nexnod-node3
+    environment:
+      - NODE_ENV=production
+      - NODE_ID=nexnod-3
+      - CLUSTER_PEERS=nexnod-node1:9001,nexnod-node2:9001
+      - LOG_LEVEL=info
+      - METRICS_PORT=9103
+    ports:
+      - "4003:4000"
+      - "9103:9103"
+    networks:
+      - nexnod-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - nexnod-node3-data:/app/data
+      - nexnod-node3-logs:/app/logs
+    labels:
+      - "app=nexnod"
+      - "node=3"
+
+  # ============================================================================
+  # OBSERVABILITY & INFRASTRUCTURE
+  # ============================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--log.level=error'
+    networks:
+      - monitoring-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "app=monitoring"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3100:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - monitoring-network
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "app=monitoring"
+
+networks:
+  lidbema-network:
+    driver: bridge
+  nexnod-network:
+    driver: bridge
+  monitoring-network:
+    driver: bridge
+  ketchup-network:
+    driver: bridge
+
+volumes:
+  lidbema-zone1-logs:
+  lidbema-zone2-logs:
+  lidbema-zone3-logs:
+  lidbema-pwa-logs:
+  nexnod-node1-data:
+  nexnod-node1-logs:
+  nexnod-node2-data:
+  nexnod-node2-logs:
+  nexnod-node3-data:
+  nexnod-node3-logs:
+  prometheus-data:
+  grafana-data:

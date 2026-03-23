@@ -1,0 +1,4 @@
+# SSL certificates directory
+# Add your certificate files here:
+# - your-domain.crt (certificate)
+# - your-domain.key (private key)

@@ -1,0 +1,104 @@
+name: CI Pipeline
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - name: lidbema-zone1
+            context: ./LidbemaZon1
+          - name: lidbema-zone2
+            context: ./LidbemaZon2
+          - name: lidbema-zone3
+            context: ./LidbemaZon3
+          - name: lidbema-pwa
+            context: ./Lidbema\ PWa
+          - name: ketchup-pwa
+            context: ./Ketchup
+          - name: nexnod-node1
+            context: ./NexNod1
+          - name: nexnod-node2
+            context: ./NexNod2
+          - name: nexnod-node3
+            context: ./NexNod3
+      max-parallel: 4
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          push: false
+          tags: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service.name }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Lint Dockerfiles
+        run: |
+          for dockerfile in $(find . -name Dockerfile -type f); do
+            echo "Checking: $dockerfile"
+            docker run --rm -i hadolint/hadolint < "$dockerfile" || true
+          done
+
+      - name: Validate docker-compose
+        run: |
+          docker run --rm -v $(pwd):/workspace -w /workspace \
+            docker/compose:latest config -f docker-compose.yml > /dev/null
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: build-matrix
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      matrix:
+        service:
+          - lidbema-zone1
+          - lidbema-zone2
+          - lidbema-zone3
+          - lidbema-pwa
+          - nexnod-node1
+          - nexnod-node2
+          - nexnod-node3
+      max-parallel: 3
+    steps:
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-fs-results.sarif'
+
+      - name: Upload scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-fs-results.sarif'
+          category: 'trivy-fs'

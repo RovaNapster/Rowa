@@ -1,0 +1,17 @@
+{
+  "name": "lidbema-zone1",
+  "version": "1.0.0",
+  "description": "Lidbema Zone 1 service",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

@@ -1,0 +1,99 @@
+groups:
+  - name: lidbema_alerts
+    interval: 30s
+    rules:
+      - alert: LidbemaServiceDown
+        expr: up{service="lidbema"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Lidbema Zone {{ $labels.zone }} is down"
+          description: "Zone {{ $labels.zone }} has been unavailable for 2 minutes"
+
+      - alert: LidbemaHighErrorRate
+        expr: rate(http_requests_total{service="lidbema",status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Lidbema Zone {{ $labels.zone }} high error rate"
+          description: "Error rate is above 5% for zone {{ $labels.zone }}"
+
+      - alert: LidbemaHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{service="lidbema"}[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Lidbema Zone {{ $labels.zone }} high latency"
+          description: "P95 latency is above 1s for zone {{ $labels.zone }}"
+
+  - name: nexnod_alerts
+    interval: 30s
+    rules:
+      - alert: NexnodNodeDown
+        expr: up{service="nexnod"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "NexNod Node {{ $labels.node }} is down"
+          description: "Node {{ $labels.node }} has been unavailable for 2 minutes"
+
+      - alert: NexnodClusterDegraded
+        expr: count(up{service="nexnod"} == 1) < 2
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "NexNod cluster degraded"
+          description: "Less than 2 nodes are healthy in the cluster"
+
+      - alert: NexnodHighMemoryUsage
+        expr: container_memory_usage_bytes{name=~"nexnod-.*"} / container_spec_memory_limit_bytes > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NexNod Node {{ $labels.node }} high memory usage"
+          description: "Memory usage is above 80% for node {{ $labels.node }}"
+
+  - name: infrastructure_alerts
+    interval: 30s
+    rules:
+      - alert: HighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.container_name }}"
+          description: "CPU usage is above 80% for {{ $labels.container_name }}"
+
+      - alert: HighMemoryUsage
+        expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.container_name }}"
+          description: "Memory usage is above 90% for {{ $labels.container_name }}"
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space"
+          description: "Less than 10% disk space available"
+
+      - alert: PrometheusDown
+        expr: up{job="prometheus"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus is down"
+          description: "Prometheus monitoring service has been unavailable for 2 minutes"

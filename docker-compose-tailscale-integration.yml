@@ -1,0 +1,377 @@
+# Docker Compose with Tailscale VPN Integration
+
+This is an optional addition to your existing docker-compose.yml
+Add the tailscale service below to enable VPN connectivity.
+
+---
+
+## Add This Service to docker-compose.yml
+
+```yaml
+  # ============================================================================
+  # TAILSCALE VPN SERVICE (Optional)
+  # ============================================================================
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscale-vpn
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - /var/lib/tailscale:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - TS_AUTHKEY=${TAILSCALE_AUTH_KEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_EXTRA_ARGS=--advertise-routes=0.0.0.0/0
+    networks:
+      - monitoring-network
+    restart: unless-stopped
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.forwarding=1
+    healthcheck:
+      test: ["CMD", "tailscale", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "app=tailscale"
+      - "service=vpn"
+```
+
+---
+
+## Step-by-Step Integration
+
+### 1. Backup Current docker-compose.yml
+
+```bash
+cp docker-compose.yml docker-compose.yml.backup
+```
+
+### 2. Add Tailscale Service
+
+Add the service definition above to your `docker-compose.yml` file,
+just before the `networks:` section at the end.
+
+### 3. Verify Syntax
+
+```bash
+docker compose config > /dev/null && echo "✓ Syntax OK"
+```
+
+### 4. Deploy Tailscale
+
+```bash
+# Set environment variable
+export TAILSCALE_AUTH_KEY='tskey-client-ktMzc8Yx9411CNTRL-MEaT7AkPMPYCir6QvmzcPYNC4eQxEBQw'
+
+# Deploy just Tailscale
+docker compose up -d tailscale
+
+# Or deploy all services
+docker compose up -d
+```
+
+### 5. Verify Deployment
+
+```bash
+# Check if running
+docker ps | grep tailscale
+
+# Get Tailscale IP (wait 10-15 seconds)
+docker exec tailscale tailscale ip -4
+
+# Expected output: 100.x.y.z
+
+# Check status
+docker exec tailscale tailscale status
+```
+
+---
+
+## Environment Variables
+
+Add to your `.env`, `.env.staging`, and `.env.production` files:
+
+```bash
+# Tailscale Configuration
+TAILSCALE_AUTH_KEY=tskey-client-ktMzc8Yx9411CNTRL-MEaT7AkPMPYCir6QvmzcPYNC4eQxEBQw
+```
+
+---
+
+## Usage Examples
+
+### SSH via Tailscale
+
+Once Tailscale is running on server:
+
+```bash
+# Get the Tailscale IP from server
+TAILSCALE_IP=$(docker exec tailscale tailscale ip -4)
+
+# SSH to server via VPN (no need to expose SSH port)
+ssh -i ~/.ssh/lidbema_deploy deploy@$TAILSCALE_IP
+
+# Or directly
+ssh -i ~/.ssh/lidbema_deploy deploy@100.x.y.z
+```
+
+### Access Services via Tailscale IP
+
+```bash
+# Get Tailscale IP
+TAILSCALE_IP=$(docker exec tailscale tailscale ip -4)
+
+# Access Grafana
+http://${TAILSCALE_IP}:3100
+
+# Access Prometheus
+http://${TAILSCALE_IP}:9090
+
+# Access Lidbema PWA
+http://${TAILSCALE_IP}:3000
+
+# Access any service
+http://${TAILSCALE_IP}:PORT
+```
+
+### Health Check
+
+```bash
+# Verify Tailscale is healthy
+docker exec tailscale tailscale status
+
+# Expected output:
+# 100.x.y.z          lidbema-prod             linux   idle
+```
+
+---
+
+## Monitoring
+
+### View Tailscale Logs
+
+```bash
+docker logs tailscale
+docker logs -f tailscale  # Follow logs
+docker logs --tail=50 tailscale  # Last 50 lines
+```
+
+### Check Network Status
+
+```bash
+# View connected devices in your Tailscale network
+docker exec tailscale tailscale status
+
+# View advertised routes
+docker exec tailscale tailscale routes
+
+# Ping another device
+docker exec tailscale tailscale ping 100.x.y.a
+```
+
+### Docker Stats
+
+```bash
+docker stats tailscale
+```
+
+---
+
+## Security Considerations
+
+### 1. Firewall
+
+Tailscale handles its own encryption, but ensure:
+- Outbound UDP 41641 is allowed
+- Outbound HTTPS (443) is allowed
+- No inbound port forwarding needed
+
+### 2. Access Control
+
+In Tailscale admin dashboard (https://login.tailscale.com):
+- Set ACL rules to restrict access
+- Only allow necessary users/devices
+- Use tags for organization
+
+### 3. Key Rotation
+
+```bash
+# To rotate the auth key (in Tailscale admin):
+1. Go to Settings → Auth keys
+2. Create new key
+3. Revoke old key
+4. Update GitHub secret
+5. Restart container
+```
+
+### 4. Logging
+
+```bash
+# View access logs
+docker logs tailscale | grep -i auth
+docker logs tailscale | grep -i error
+```
+
+---
+
+## Troubleshooting
+
+### Container Logs Show Errors
+
+```bash
+docker logs tailscale 2>&1 | head -50
+```
+
+### Can't Get Tailscale IP
+
+```bash
+# Wait 15 seconds for container to initialize
+sleep 15
+docker exec tailscale tailscale ip -4
+
+# If still fails, check status
+docker exec tailscale tailscale status
+
+# Restart container
+docker restart tailscale
+```
+
+### High Memory Usage
+
+```bash
+# Check memory
+docker stats tailscale
+
+# Restart if needed
+docker restart tailscale
+```
+
+### Can't Connect from Local Machine
+
+```bash
+# Verify Tailscale running on server
+docker exec tailscale tailscale status
+
+# Install Tailscale locally
+# https://tailscale.com/download
+
+# Connect locally
+tailscale up
+
+# Check if connected to same network
+tailscale status
+```
+
+---
+
+## Optional: Advanced Configuration
+
+### Route All Traffic Through Tailscale
+
+```yaml
+environment:
+  - TS_AUTHKEY=${TAILSCALE_AUTH_KEY}
+  - TS_EXTRA_ARGS=--advertise-routes=0.0.0.0/0 --accept-routes=true
+```
+
+### Use Specific Tailscale Version
+
+```yaml
+image: tailscale/tailscale:v1.62.0  # Specify version instead of latest
+```
+
+### Disable Auto Update
+
+```yaml
+environment:
+  - TS_NO_AUTOUPDATE=true
+```
+
+### Custom State Directory
+
+```yaml
+volumes:
+  - /custom/path/tailscale:/var/lib/tailscale
+```
+
+---
+
+## Deployment Workflow with Tailscale
+
+```
+1. Deploy Tailscale on staging
+   docker compose up -d tailscale
+
+2. Get Tailscale IP
+   docker exec tailscale tailscale ip -4
+   # Output: 100.x.y.z
+
+3. Connect locally
+   tailscale up
+   tailscale status
+
+4. SSH to staging via VPN
+   ssh -i ~/.ssh/lidbema_deploy deploy@100.x.y.z
+
+5. Verify services accessible
+   curl http://100.x.y.z:3100  # Grafana
+   curl http://100.x.y.z:9090  # Prometheus
+
+6. Deploy on production
+   Same steps as staging
+
+7. Update GitHub Actions
+   Add Tailscale connection step
+
+8. Test CI/CD deployment via VPN
+   git push origin develop
+```
+
+---
+
+## Commands Reference
+
+| Command | Purpose |
+|---------|---------|
+| `docker compose up -d tailscale` | Start Tailscale |
+| `docker compose down tailscale` | Stop Tailscale |
+| `docker exec tailscale tailscale ip -4` | Get IP address |
+| `docker exec tailscale tailscale status` | View status |
+| `docker exec tailscale tailscale routes` | View routes |
+| `docker exec tailscale tailscale ping 100.x.x.2` | Test connectivity |
+| `docker logs tailscale` | View logs |
+| `docker stats tailscale` | Monitor resources |
+| `docker restart tailscale` | Restart service |
+
+---
+
+## Next Steps
+
+1. ✅ Auth key: tskey-client-ktMzc8Yx9411CNTRL-MEaT7AkPMPYCir6QvmzcPYNC4eQxEBQw
+2. ⏳ Add to GitHub Secrets: TAILSCALE_AUTH_KEY
+3. ⏳ Add tailscale service to docker-compose.yml
+4. ⏳ Deploy: docker compose up -d tailscale
+5. ⏳ Get IP: docker exec tailscale tailscale ip -4
+6. ⏳ Connect locally and test
+7. ⏳ Update GitHub Actions workflow
+8. ⏳ Test end-to-end deployment
+
+---
+
+## Files Created/Updated
+
+- ✓ TAILSCALE_GUIDE.md - Complete integration guide
+- ✓ TAILSCALE_DEPLOYMENT.md - Deployment configuration
+- ✓ docker-compose-tailscale-integration.yml - This file
+
+**Next:** Copy tailscale service to your docker-compose.yml
+
+---
+
+**Status:** Ready to deploy  
+**Date:** 2026-03-16  
+**Auth Key:** Provided and valid

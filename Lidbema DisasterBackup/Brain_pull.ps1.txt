@@ -1,0 +1,25 @@
+# ==============================================================================
+# LIDBEMA OS - NIGHTLY BRAIN-VAULT PULL (TAILSCALE -> WINDOWS)
+# ==============================================================================
+
+$LogFile = "C:\SkräckPOrr\Server\Lidbema DisasterBackup"
+$Date = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+Add-Content -Path $LogFile -Value "[$Date] Initierar PULL från Zon 3 via Tailscale..."
+
+# Byt ut '100.x.x.x' mot Strömsund-serverns Tailscale-IP och 'root' mot dess användare
+$Zon3_IP = "100.74.250.83"
+$Zon3_User = "RovaNapster@github"    
+$SourceDir = "/mnt/lidbema_data/brain_vault/"
+$DestDir = "C:\Lidbema_Backups\Brain_Vault\"
+
+if (!(Test-Path -Path $DestDir)) { New-Item -ItemType Directory -Path $DestDir | Out-Null }
+
+try {
+    # Använder scp för att dra filerna över den krypterade tunneln
+    scp -r "$Zon3_User@${Zon3_IP}:$SourceDir*" $DestDir
+    $DateEnd = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -Path $LogFile -Value "[$DateEnd] [SUCCESS] Rova-Brain kopierad till C-disken."
+} catch {
+    $DateEnd = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -Path $LogFile -Value "[$DateEnd] [ERROR] Hämtning misslyckades."
+}

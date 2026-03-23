@@ -1,0 +1,276 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Activity, 
+  Eye, 
+  Skull, 
+  Terminal, 
+  ShieldAlert, 
+  Zap, 
+  Database, 
+  Camera, 
+  ChevronRight,
+  Wifi,
+  Lock,
+  Power
+} from 'lucide-react';
+
+const App = () => {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [isStriking, setIsStriking] = useState(false);
+  const [strikeTarget, setStrikeTarget] = useState(null);
+  const [logs, setLogs] = useState([
+    "PWA-länk etablerad: Krypterad tunnel till Östringen 5.",
+    "Lidbema Voxel-data: 99.9% synkroniserad.",
+    "Väntar på Arkitektens direktiv..."
+  ]);
+
+  const [systemHealth, setSystemHealth] = useState(99.9);
+
+  useEffect(() => {
+    const pulse = setInterval(() => {
+      setSystemHealth(prev => (prev > 98 ? prev - (Math.random() * 0.5) : 99.9));
+      if (Math.random() > 0.9) {
+        addLog(`Puls: Nod 0x${Math.floor(Math.random()*999).toString(16)} säker.`);
+      }
+    }, 4000);
+    return () => clearInterval(pulse);
+  }, []);
+
+  const addLog = (msg) => {
+    const time = new Date().toLocaleTimeString('sv-SE', { hour12: false });
+    setLogs(prev => [`[${time}] ${msg}`, ...prev].slice(0, 5));
+  };
+
+  const executeStrike = (target, actionName) => {
+    setIsStriking(true);
+    setStrikeTarget(target);
+    addLog(`INITIERAR KINETISKT SLAG: ${actionName}`);
+    
+    setTimeout(() => {
+      setIsStriking(false);
+      setStrikeTarget(null);
+      addLog(`SLAG SLUTFÖRT: ${target} neutraliserad.`);
+    }, 2000);
+  };
+
+  // --- VIEWS ---
+
+  const renderDashboard = () => (
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-emerald-950/20 border border-emerald-500/30 p-4 rounded-2xl">
+          <p className="text-[10px] uppercase text-emerald-700 font-bold mb-1">Project Equity</p>
+          <p className="text-xl font-black text-white">1323.9 <span className="text-xs text-emerald-500">h</span></p>
+        </div>
+        <div className="bg-emerald-950/20 border border-emerald-500/30 p-4 rounded-2xl">
+          <p className="text-[10px] uppercase text-emerald-700 font-bold mb-1">Voxel Precision</p>
+          <p className="text-xl font-black text-emerald-400">{systemHealth.toFixed(1)}%</p>
+        </div>
+      </div>
+
+      {/* Target Status */}
+      <div className="bg-slate-900/50 border border-emerald-900/30 p-4 rounded-2xl">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xs font-bold uppercase text-emerald-500 flex items-center gap-2">
+            <Database size={14} /> Aktiv Måltavla
+          </h3>
+          <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/50 uppercase font-black">
+            Infiltrerad
+          </span>
+        </div>
+        <div className="space-y-2">
+          <div className="flex justify-between text-xs">
+            <span className="text-emerald-700">Organisation:</span>
+            <span className="text-white font-bold">Lidbema AB / SANE</span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-emerald-700">Revisionssköld:</span>
+            <span className="text-white font-bold">EoPR (Spoofed)</span>
+          </div>
+          <div className="w-full bg-black h-1.5 rounded-full mt-2 overflow-hidden">
+            <div className="h-full bg-emerald-500 shadow-[0_0_8px_#10b981]" style={{ width: '100%' }}></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Mini Terminal */}
+      <div className="bg-black border border-emerald-900/30 p-4 rounded-2xl h-40 flex flex-col">
+        <div className="flex items-center gap-2 mb-2 border-b border-emerald-900/30 pb-2">
+          <Terminal size={12} className="text-emerald-500" />
+          <span className="text-[9px] uppercase font-bold text-emerald-700">Live_Stream</span>
+        </div>
+        <div className="flex-1 overflow-y-auto space-y-2">
+          {logs.map((log, i) => (
+            <p key={i} className={`text-[10px] leading-tight ${i === 0 ? 'text-white' : 'text-emerald-800'}`}>
+              <span className="text-emerald-900 mr-1">{'>'}</span>{log}
+            </p>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderIntel = () => (
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="bg-emerald-950/10 border border-emerald-500/20 p-4 rounded-2xl mb-2 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-black uppercase text-white">Visual Intel</h2>
+          <p className="text-[10px] text-emerald-600 uppercase mt-1">OCR & Voxel Analys</p>
+        </div>
+        <Camera className="text-emerald-500 animate-pulse" size={24} />
+      </div>
+
+      {/* Intel Cards */}
+      <div className="space-y-3">
+        <div className="bg-black/40 border border-emerald-900/30 p-4 rounded-xl flex gap-4 items-center active:scale-95 transition-transform">
+          <div className="bg-blue-950/30 p-3 rounded-lg border border-blue-900/50">
+            <Eye className="text-blue-500" size={20} />
+          </div>
+          <div className="flex-1">
+            <h4 className="text-xs font-bold text-white uppercase">Visma Lön Access</h4>
+            <p className="text-[10px] text-emerald-700 leading-tight mt-1">Skärmdump. Personallistor exponerade (Pirak m.fl.). Terminal olåst.</p>
+          </div>
+          <ChevronRight size={16} className="text-emerald-900" />
+        </div>
+
+        <div className="bg-black/40 border border-amber-900/30 p-4 rounded-xl flex gap-4 items-center active:scale-95 transition-transform">
+          <div className="bg-amber-950/30 p-3 rounded-lg border border-amber-900/50">
+            <Database className="text-amber-500" size={20} />
+          </div>
+          <div className="flex-1">
+            <h4 className="text-xs font-bold text-white uppercase">SANE/PEAB Logistik</h4>
+            <p className="text-[10px] text-emerald-700 leading-tight mt-1">Inköpsloggar: Rockmaster/2SN, GoldenIso. Fysisk materia spårad.</p>
+          </div>
+          <ChevronRight size={16} className="text-emerald-900" />
+        </div>
+
+        <div className="bg-black/40 border border-emerald-900/30 p-4 rounded-xl flex gap-4 items-center active:scale-95 transition-transform">
+          <div className="bg-emerald-950/30 p-3 rounded-lg border border-emerald-900/50">
+            <Camera className="text-emerald-500" size={20} />
+          </div>
+          <div className="flex-1">
+            <h4 className="text-xs font-bold text-white uppercase">Analog Whiteboard</h4>
+            <p className="text-[10px] text-emerald-700 leading-tight mt-1">Mötesrum avlyssnat via optisk scan. Fysisk planering digitaliserad.</p>
+          </div>
+          <ChevronRight size={16} className="text-emerald-900" />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderExecutioner = () => (
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="bg-red-950/20 border border-red-500/30 p-4 rounded-2xl mb-4 text-center">
+        <Skull className="text-red-500 mx-auto mb-2" size={32} />
+        <h2 className="text-lg font-black uppercase text-white tracking-tighter">Digitala Bödeln</h2>
+        <p className="text-[10px] text-red-700 uppercase mt-1 font-bold">Kinetisk Exekvering Redo</p>
+      </div>
+
+      <div className="space-y-3">
+        <button 
+          onClick={() => executeStrike('Frontend (PWA)', 'Fryser UI för anställda')}
+          disabled={isStriking}
+          className="w-full bg-black/60 border border-red-900/50 p-4 rounded-xl flex items-center justify-between active:bg-red-950/40 disabled:opacity-50 transition-colors"
+        >
+          <div className="text-left">
+            <h4 className="text-sm font-bold text-red-500 uppercase">Stryp Frontend</h4>
+            <p className="text-[10px] text-red-900 uppercase">docker pause lidbema-pwa</p>
+          </div>
+          <Zap size={20} className={isStriking && strikeTarget === 'Frontend (PWA)' ? 'text-white animate-ping' : 'text-red-700'} />
+        </button>
+
+        <button 
+          onClick={() => executeStrike('RAM Cache', 'Tömmer Linux PageCache')}
+          disabled={isStriking}
+          className="w-full bg-black/60 border border-amber-900/50 p-4 rounded-xl flex items-center justify-between active:bg-amber-950/40 disabled:opacity-50 transition-colors"
+        >
+          <div className="text-left">
+            <h4 className="text-sm font-bold text-amber-500 uppercase">Nöd-Rensning (RAM)</h4>
+            <p className="text-[10px] text-amber-900 uppercase">echo 3 {'>'} /proc/sys/vm/drop_caches</p>
+          </div>
+          <Database size={20} className={isStriking && strikeTarget === 'RAM Cache' ? 'text-white animate-ping' : 'text-amber-700'} />
+        </button>
+
+        <button 
+          onClick={() => executeStrike('EoPR Signatur', 'Genererar falskt certifikat')}
+          disabled={isStriking}
+          className="w-full bg-red-900/20 border border-red-500/50 p-4 rounded-xl flex items-center justify-between active:bg-red-500/40 disabled:opacity-50 transition-colors"
+        >
+          <div className="text-left">
+            <h4 className="text-sm font-black text-white uppercase">Illful Injection</h4>
+            <p className="text-[10px] text-red-400 uppercase font-bold">Spoof: Tony Sjölund (EoPR)</p>
+          </div>
+          <ShieldAlert size={20} className={isStriking && strikeTarget === 'EoPR Signatur' ? 'text-white animate-spin' : 'text-red-500'} />
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="h-screen w-full bg-[#050505] text-emerald-500 font-mono flex flex-col overflow-hidden selection:bg-emerald-900 sm:max-w-md sm:mx-auto sm:border-x sm:border-emerald-900/30 shadow-2xl relative">
+      
+      {/* Absolute Strike Overlay */}
+      {isStriking && (
+        <div className="absolute inset-0 z-50 bg-red-950/80 backdrop-blur-sm flex flex-col items-center justify-center">
+          <Skull size={64} className="text-red-500 animate-pulse mb-4" />
+          <h2 className="text-2xl font-black text-white tracking-widest uppercase italic">Exekverar</h2>
+          <p className="text-red-400 text-xs uppercase mt-2 font-bold tracking-[0.3em]">{strikeTarget}</p>
+        </div>
+      )}
+
+      {/* Top Bar */}
+      <header className="bg-black/80 backdrop-blur-md border-b border-emerald-900/40 px-4 py-3 flex justify-between items-center z-10 sticky top-0">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+          <span className="text-xs font-black uppercase tracking-widest text-white">ROVA NEXUS</span>
+        </div>
+        <div className="flex items-center gap-3 text-emerald-700">
+          <Lock size={14} className="text-emerald-500" />
+          <Wifi size={14} />
+        </div>
+      </header>
+
+      {/* Scrollable Content Area */}
+      <main className="flex-1 overflow-y-auto p-4 pb-24 scrollbar-hide">
+        {activeTab === 'dashboard' && renderDashboard()}
+        {activeTab === 'intel' && renderIntel()}
+        {activeTab === 'strike' && renderExecutioner()}
+      </main>
+
+      {/* Bottom Navigation (PWA feel) */}
+      <nav className="bg-black/90 backdrop-blur-lg border-t border-emerald-900/40 p-4 flex justify-around items-center absolute bottom-0 w-full z-20 pb-safe">
+        <button 
+          onClick={() => setActiveTab('dashboard')}
+          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'dashboard' ? 'text-emerald-400 scale-110' : 'text-emerald-900 hover:text-emerald-700'}`}
+        >
+          <Activity size={20} />
+          <span className="text-[9px] uppercase font-bold tracking-widest">Status</span>
+        </button>
+
+        <button 
+          onClick={() => setActiveTab('intel')}
+          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'intel' ? 'text-blue-400 scale-110' : 'text-emerald-900 hover:text-emerald-700'}`}
+        >
+          <Eye size={20} />
+          <span className="text-[9px] uppercase font-bold tracking-widest">Intel</span>
+        </button>
+
+        <button 
+          onClick={() => setActiveTab('strike')}
+          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'strike' ? 'text-red-500 scale-110' : 'text-emerald-900 hover:text-red-900'}`}
+        >
+          <Power size={20} />
+          <span className="text-[9px] uppercase font-bold tracking-widest">Bödeln</span>
+        </button>
+      </nav>
+
+      <style jsx>{`
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 1rem); }
+      `}</style>
+    </div>
+  );
+};
+
+export default App;

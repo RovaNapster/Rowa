@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CREED Rovanapster | Dashboard</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        :root {
+            --bg-dark: #121212;
+            --card-bg: #1e1e1e;
+            --text-main: #ffffff;
+            --accent-purple: #a855f7;
+            --accent-red: #ef4444;
+            --accent-green: #22c55e;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            letter-spacing: 2px;
+            background: linear-gradient(to right, #ef4444, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-badge {
+            background: rgba(168, 85, 247, 0.2);
+            border: 1px solid var(--accent-purple);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            margin-top: 10px;
+            display: inline-block;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 1000px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.05);
+            transition: transform 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .asset-name {
+            font-size: 1.2rem;
+            color: #999;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .asset-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .trend {
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .trend.up { color: var(--accent-green); }
+        .trend.down { color: var(--accent-red); }
+
+        .indicator {
+            height: 10px;
+            width: 100%;
+            background: #333;
+            border-radius: 5px;
+            margin-top: 15px;
+            overflow: hidden;
+        }
+
+        .progress {
+            height: 100%;
+            background: var(--accent-purple);
+            width: 0%;
+            transition: width 1s ease-in-out;
+        }
+
+        #log {
+            margin-top: 40px;
+            width: 100%;
+            max-width: 1000px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: #666;
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 10px;
+            height: 100px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <img src="https://i.imgur.com/your-generated-icon.png" alt="Logo" style="width: 80px; margin-bottom: 10px; opacity: 0.8;">
+        <h1>CREED Rovanapster</h1>
+        <div class="status-badge" id="conn-status">DARKSIRI: OFFLINE</div>
+    </div>
+
+    <div class="grid">
+        <div class="card" id="card-aurum">
+            <div class="asset-name">Aurum (Guld)</div>
+            <div class="asset-value" id="aurum-val">0 SEK</div>
+            <div class="trend up" id="aurum-trend">↑ 0%</div>
+            <div class="indicator">
+                <div class="progress" id="aurum-progress" style="width: 45%;"></div>
+            </div>
+        </div>
+
+        <div class="card" id="card-creedy">
+            <div class="asset-name">Creedy Motor</div>
+            <div class="asset-value" id="creedy-val">0.00%</div>
+            <div class="trend" id="creedy-trend">Styrränta</div>
+            <div class="indicator">
+                <div class="progress" id="creedy-progress" style="width: 70%;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="log">>> Initierar väntan på backend-puls...</div>
+
+    <script>
+        // ANSLUT TILL DIN DOCKER-BACKEND
+        const socket = io('http://localhost:8080'); // Ändra till server-IP vid behov
+        const logDiv = document.getElementById('log');
+        const connStatus = document.getElementById('conn-status');
+
+        function addLog(msg) {
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML = `[${time}] ${msg}<br>` + logDiv.innerHTML;
+        }
+
+        socket.on('connect', () => {
+            connStatus.innerText = "DARKSIRI: ONLINE";
+            connStatus.style.borderColor = "#22c55e";
+            addLog("Ansluten till Modifiering Siri Darksiri.");
+        });
+
+        socket.on('disconnect', () => {
+            connStatus.innerText = "DARKSIRI: OFFLINE";
+            connStatus.style.borderColor = "#ef4444";
+        });
+
+        // LYSSNA PÅ UPDATERINGAR
+        socket.on('asset_update', (data) => {
+            addLog(`Mottog data: ${data.asset} uppdaterad.`);
+            
+            if(data.asset === 'Aurum') {
+                document.getElementById('aurum-val').innerText = data.price + ' SEK';
+                document.getElementById('aurum-progress').style.width = data.percent + '%';
+            }
+            
+            if(data.asset === 'Creedy') {
+                document.getElementById('creedy-val').innerText = data.rate + '%';
+            }
+
+            // Trigger för "P" (Profit)
+            if(data.status === 'P') {
+                document.body.style.boxShadow = "inset 0 0 100px rgba(168, 85, 247, 0.4)";
+                setTimeout(() => document.body.style.boxShadow = "none", 2000);
+            }
+        });
+    </script>
+</body>
+</html>

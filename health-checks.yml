@@ -1,0 +1,54 @@
+health_checks:
+  lidbema-zone1:
+    url: http://localhost:3001/health
+    timeout: 10s
+    interval: 30s
+    retries: 3
+    
+  lidbema-zone2:
+    url: http://localhost:3002/health
+    timeout: 10s
+    interval: 30s
+    retries: 3
+    
+  lidbema-zone3:
+    url: http://localhost:3003/health
+    timeout: 10s
+    interval: 30s
+    retries: 3
+    
+  lidbema-pwa:
+    url: http://localhost:3000/health
+    timeout: 10s
+    interval: 30s
+    retries: 3
+    
+  nexnod-node1:
+    url: http://localhost:4001/health
+    timeout: 10s
+    interval: 30s
+    retries: 3
+    
+  nexnod-node2:
+    url: http://localhost:4002/health
+    timeout: 10s
+    interval: 30s
+    retries: 3
+    
+  nexnod-node3:
+    url: http://localhost:4003/health
+    timeout: 10s
+    interval: 30s
+    retries: 3
+    
+  prometheus:
+    url: http://localhost:9090/-/healthy
+    timeout: 10s
+    interval: 30s
+    retries: 3
+    
+  grafana:
+    url: http://localhost:3100/api/health
+    timeout: 10s
+    interval: 30s
+    retries: 3

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#050505">
+    <title>ROVA_NET: Master Control</title>
+    
+    <link rel="manifest" href="./manifest.json">
+    
+    <style>
+        :root {
+            --holo-blue: #00f3ff;
+            --holo-green: #00ff66;
+            --holo-red: #ff0033;
+            --bg-dark: #050505;
+            --panel-bg: rgba(0, 243, 255, 0.03);
+        }
+        * { box-sizing: border-box; }
+        body { 
+            background-color: var(--bg-dark); 
+            color: var(--holo-blue); 
+            font-family: 'Courier New', Courier, monospace; 
+            margin: 0; padding: 10px; 
+            display: flex; flex-direction: column; 
+            height: 100vh; overflow: hidden; 
+            user-select: none;
+        }
+        /* HUD Header */
+        .hud-header {
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid var(--holo-blue); padding-bottom: 10px; margin-bottom: 15px;
+            text-shadow: 0 0 10px var(--holo-blue);
+        }
+        .hud-title { font-size: 1.2rem; font-weight: bold; }
+        .hud-stats { display: flex; gap: 20px; font-size: 0.9rem; }
+        .stat-box span { color: #fff; font-weight: bold; }
+        .status-indicator { color: var(--holo-green); text-shadow: 0 0 10px var(--holo-green); animation: pulse 2s infinite; }
+        
+        /* Main Layout */
+        .container { display: flex; flex: 1; gap: 15px; overflow: hidden; }
+        
+        /* Swarm Grid */
+        .swarm-panel { flex: 2; display: flex; flex-direction: column; background: var(--panel-bg); border: 1px solid rgba(0,243,255,0.2); border-radius: 5px; padding: 10px; }
+        .swarm-grid { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; align-content: center; }
+        .node { 
+            border: 1px solid rgba(0, 243, 255, 0.3); border-radius: 4px; 
+            display: flex; align-items: center; justify-content: center; font-size: 0.8rem;
+            transition: all 0.2s ease; aspect-ratio: 1; 
+        }
+        
+        /* Node States */
+        .node.active { background-color: rgba(0, 243, 255, 0.2); border-color: var(--holo-blue); box-shadow: 0 0 15px var(--holo-blue); color: #fff; transform: scale(1.05); }
+        .node.consensus { background-color: rgba(0, 255, 102, 0.2); border-color: var(--holo-green); box-shadow: 0 0 15px var(--holo-green); color: #fff; }
+        .node.offline { border-color: var(--holo-red); background-color: rgba(255, 0, 51, 0.1); color: var(--holo-red); box-shadow: 0 0 15px var(--holo-red); text-decoration: line-through; opacity: 0.5; }
+        
+        /* Log Panel */
+        .log-panel { flex: 1.5; border: 1px solid rgba(0,243,255,0.2); background: var(--panel-bg); border-radius: 5px; padding: 10px; display: flex; flex-direction: column; }
+        .log-header { font-size: 0.8rem; border-bottom: 1px dashed var(--holo-blue); padding-bottom: 5px; margin-bottom: 10px; opacity: 0.8; }
+        .log-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column-reverse; font-size: 0.75rem; }
+        .log-entry { margin-bottom: 6px; opacity: 0.85; word-wrap: break-word; }
+        .log-entry.ws { color: #fff; }
+        .log-entry.sync { color: var(--holo-green); }
+        .log-entry.warn { color: #ffbb00; }
+        .log-entry.chaos { color: var(--holo-red); font-weight: bold; }
+
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+        
+        /* Mobil-anpassning */
+        @media (max-width: 768px) {
+            .container { flex-direction: column; }
+            .swarm-grid { gap: 5px; }
+            .node { font-size: 0.6rem; }
+            .hud-stats { font-size: 0.7rem; gap: 10px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="hud-header">
+        <div class="hud-title">ZELDA_OS v5.0</div>
+        <div class="hud-stats">
+            <div class="stat-box">GHOST TUNNEL: <span id="wsStatus" class="status-indicator">OFFLINE</span></div>
+            <div class="stat-box">TARGET: <span id="targetDisplay">AWAITING...</span></div>
+            <div class="stat-box">PPM: <span id="ppmDisplay">0</span></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="swarm-panel">
+            <div class="log-header">NEURAL SWARM MESH (VLAN 100)</div>
+            <div class="swarm-grid" id="swarmGrid"></div>
+        </div>
+        
+        <div class="log-panel">
+            <div class="log-header">TACTICAL TELEMETRY</div>
+            <div class="log-content" id="logPanel"></div>
+        </div>
+    </div>
+
+    <script>
+        // === CORE CONFIGURATION ===
+        const CONFIG = {
+            WS_URL: 'ws://127.0.0.1:8080/api/ws', // Byt till din riktiga IP
+            GRID_SIZE: 25,
+            MAX_LOGS: 60
+        };
+
+        const DOM = {
+            grid: document.getElementById('swarmGrid'),
+            log: document.getElementById('logPanel'),
+            wsStatus: document.getElementById('wsStatus'),
+            targetDisplay: document.getElementById('targetDisplay'),
+            ppmDisplay: document.getElementById('ppmDisplay')
+        };
+
+        // --- PWA & SERVICE WORKER INIT ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').then(reg => {
+                    logEvent("[SYS] Service Worker aktiverad (Ghost Cache Mätar).", "sync");
+                    requestPushPermissions();
+                }).catch(err => logEvent(`[ERR] SW Misslyckades: ${err}`, "chaos"));
+            });
+        }
+
+        async function requestPushPermissions() {
+            if ('Notification' in window) {
+                const perm = await Notification.requestPermission();
+                if (perm === 'granted') logEvent("[SYS] Push-notiser säkrade.", "sync");
+            }
+        }
+
+        // --- UI & SWARM LOGIC ---
+        const nodes = [];
+        const nodeStatus = new Array(CONFIG.GRID_SIZE).fill('online');
+
+        for (let i = 1; i <= CONFIG.GRID_SIZE; i++) {
+            let el = document.createElement('div');
+            el.className = 'node';
+            el.innerText = `N${i < 10 ? '0'+i : i}`;
+            DOM.grid.appendChild(el);
+            nodes.push(el);
+        }
+
+        function logEvent(msg, type = '') {
+            const entry = document.createElement('div');
+            const time = new Date().toLocaleTimeString('sv-SE', { hour12: false });
+            entry.className = `log-entry ${type}`;
+            entry.innerText = `[${time}] ${msg}`;
+            DOM.log.prepend(entry);
+            if (DOM.log.children.length > CONFIG.MAX_LOGS) DOM.log.removeChild(DOM.log.lastChild);
+        }
+
+        // --- WEBSOCKET (GHOST TUNNEL) ---
+        let ws;
+        let reconnectAttempts = 0;
+
+        function connectTunnel() {
+            logEvent("[NET] Initierar anslutning mot Sarkofagen...", "warn");
+            ws = new WebSocket(CONFIG.WS_URL);
+
+            ws.onopen = () => {
+                reconnectAttempts = 0;
+                DOM.wsStatus.innerText = "LOCKED";
+                DOM.wsStatus.style.color = "var(--holo-green)";
+                DOM.wsStatus.style.animation = "none";
+                logEvent("[NET] Ghost Tunnel Etablerad. Lyssnar på ZELDA_MOTOR.", "sync");
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    // Uppdatera HUD
+                    if(data.lastScanned) DOM.targetDisplay.innerText = data.lastScanned;
+                    if(data.picksPerMinute) DOM.ppmDisplay.innerText = data.picksPerMinute;
+                    
+                    // Logga inkommande riktig data
+                    logEvent(`[RX] Payload mottagen: ${data.status} | L: ${data.latency}`, "ws");
+                    
+                    // Trigg blinkning på noderna för att visualisera inkommande data
+                    const activeNodes = [];
+                    for(let i=0; i<4; i++) {
+                        const idx = Math.floor(Math.random() * CONFIG.GRID_SIZE);
+                        if(nodeStatus[idx] === 'online') {
+                            nodes[idx].classList.add('consensus');
+                            setTimeout(() => nodes[idx].classList.remove('consensus'), 300);
+                        }
+                    }
+                } catch (e) {}
+            };
+
+            ws.onclose = () => {
+                DOM.wsStatus.innerText = "RECONNECTING";
+                DOM.wsStatus.style.color = "var(--holo-red)";
+                DOM.wsStatus.style.animation = "pulse 1s infinite";
+                let waitTime = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
+                reconnectAttempts++;
+                setTimeout(connectTunnel, waitTime);
+            };
+        }
+
+        // --- SWARM SIMULATOR & CHAOS MONKEY (Background Noise) ---
+        const gossipMessages = [
+            "Verifierar latency mot Edge...", "BGP-Route via AS 65002.", "Pre-fetch aktiverad.", "Ignorerar OAM-paket."
+        ];
+
+        setInterval(() => {
+            // Rensa gamla states
+            nodes.forEach((n, idx) => { if (nodeStatus[idx] === 'online') n.classList.remove('active'); });
+
+            // Random Chatter
+            const speakerIdx = Math.floor(Math.random() * CONFIG.GRID_SIZE);
+            if (nodeStatus[speakerIdx] === 'online') {
+                nodes[speakerIdx].classList.add('active');
+                if (Math.random() > 0.8) {
+                    const msg = gossipMessages[Math.floor(Math.random() * gossipMessages.length)];
+                    logEvent(`N${speakerIdx < 9 ? '0'+(speakerIdx+1) : speakerIdx+1} -> ${msg}`);
+                }
+            }
+
+            // Chaos Monkey (1% risk per tick att en nod dör)
+            if (Math.random() > 0.99) {
+                const targetIdx = Math.floor(Math.random() * CONFIG.GRID_SIZE);
+                if (nodeStatus[targetIdx] === 'online') {
+                    nodeStatus[targetIdx] = 'offline';
+                    nodes[targetIdx].classList.replace('active', 'offline');
+                    nodes[targetIdx].classList.remove('consensus');
+                    logEvent(`[CHAOS] Nod ${targetIdx+1} förlorad (Simulerad kabelbrand). Rerouting...`, 'chaos');
+                    
+                    setTimeout(() => {
+                        nodeStatus[targetIdx] = 'online';
+                        nodes[targetIdx].classList.remove('offline');
+                        logEvent(`[RECOVERY] Nod ${targetIdx+1} återansluten via mesh.`, 'sync');
+                    }, 8000);
+                }
+            }
+        }, 1000);
+
+        // Boot
+        connectTunnel();
+    </script>
+</body>
+</html>

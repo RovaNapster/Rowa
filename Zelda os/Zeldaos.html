@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DARKSIRI | ROVA SYSTEM MONITOR</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --text-main: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent-green: #238636;
+            --accent-red: #da3633;
+            --accent-blue: #58a6ff;
+            --accent-purple: #a855f7;
+            --border: #30363d;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 4px;
+            font-weight: bold;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            text-transform: uppercase;
+            font-size: 0.8em;
+        }
+
+        .status-healthy { color: var(--accent-green); border-color: var(--accent-green); }
+        .status-critical { color: var(--accent-red); border-color: var(--accent-red); animation: pulse 2s infinite; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 20px;
+            transition: transform 0.2s;
+        }
+        .card:hover { border-color: var(--accent-blue); }
+
+        .card h3 {
+            margin: 0 0 10px 0;
+            color: var(--text-muted);
+            font-size: 0.8em;
+            text-transform: uppercase;
+        }
+
+        .metric {
+            font-size: 2em;
+            font-weight: bold;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .progress-bar {
+            background-color: #30363d;
+            height: 8px;
+            border-radius: 4px;
+            margin-top: 15px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background-color: var(--accent-blue);
+            width: 0%;
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        button {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            color: var(--accent-blue);
+            padding: 12px 24px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            font-size: 0.8em;
+            transition: all 0.2s;
+        }
+
+        button:hover { background-color: var(--border); border-color: var(--text-main); }
+        button.danger { color: var(--accent-red); border-color: var(--accent-red); }
+        button.danger:hover { background-color: rgba(218, 54, 51, 0.1); }
+        button.special { color: var(--accent-purple); border-color: var(--accent-purple); }
+
+        .terminal {
+            background-color: #000;
+            border: 1px solid var(--border);
+            padding: 15px;
+            height: 250px;
+            overflow-y: auto;
+            font-size: 0.85em;
+            color: var(--accent-green);
+            border-radius: 4px;
+        }
+
+        .log-entry { margin-bottom: 4px; line-height: 1.4; border-bottom: 1px solid #0a0a0a; }
+        .log-time { color: var(--text-muted); margin-right: 10px; font-size: 0.9em; }
+
+        input[type="text"] {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 8px;
+            font-family: inherit;
+            font-size: 0.8em;
+            border-radius: 4px;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(218, 54, 51, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(218, 54, 51, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(218, 54, 51, 0); }
+        }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <div class="header">
+        <div>
+            <h1 style="margin:0; letter-spacing: -1px; font-size: 1.8em;">DARKSIRI | ROVA SYSTEM</h1>
+            <small style="color: var(--accent-purple)">CREED Rovanapster: Road to the Unconscious</small>
+        </div>
+        <div style="text-align: right;">
+            <input type="text" v-model="apiToken" placeholder="Admin Token">
+            <br><br>
+            <div :class="connected ? 'status-healthy' : 'status-critical'" class="status-badge">
+                {{ connected ? 'Connected' : 'Offline' }}
+            </div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h3>AI Confidence (Avg)</h3>
+            <div class="metric">{{ aiScore }}%</div>
+            <div class="progress-bar">
+                <div class="progress-fill" :style="{ width: aiScore + '%', backgroundColor: aiScore < 80 ? 'var(--accent-red)' : 'var(--accent-blue)' }"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Aurum Index (SEK)</h3>
+            <div class="metric" style="color: var(--accent-green)">{{ aurumPrice }}</div>
+            <small>Realtid via Socket.io</small>
+        </div>
+
+        <div class="card">
+            <h3>Creedy Recoveries</h3>
+            <div class="metric" style="color: var(--accent-red)">{{ recoveries }}</div>
+            <small>Aktiva data-loops</small>
+        </div>
+
+        <div class="card">
+            <h3>Total Scans (10m)</h3>
+            <div class="metric">{{ totalScans }}</div>
+            <small>Transaktioner verifierade</small>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button @click="triggerCommand('run_kjell')">💾 KÖR KJELL-SCRIPT (BACKUP)</button>
+        <button @click="triggerCommand('runa')" class="special">ᚱ RUNA (GUNNVOR TRIBUTE)</button>
+        <button @click="triggerCommand('victory')">🌈 VICTORY (R-O-V-A)</button>
+        <button @click="forceFletch" class="danger">⚡ FORCE SYSTEM FLETCH (CMD 4)</button>
+    </div>
+
+    <h3>Live Terminal Output</h3>
+    <div class="terminal" id="terminal">
+        <div v-for="log in logs" :key="log.id" class="log-entry">
+            <span class="log-time">[{{ log.time }}]</span>
+            <span :style="{ color: log.color }">{{ log.msg }}</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    const { createApp, ref, onMounted } = Vue;
+
+    createApp({
+        setup() {
+            const apiToken = ref("din_superhemliga_token");
+            const connected = ref(false);
+            const aiScore = ref(0);
+            const aurumPrice = ref(0);
+            const recoveries = ref(0);
+            const totalScans = ref(0);
+            const logs = ref([]);
+            
+            let socket;
+
+            const addLog = (msg, color = 'var(--accent-green)') => {
+                const time = new Date().toLocaleTimeString();
+                logs.value.unshift({ id: Date.now(), time, msg, color });
+                if (logs.value.length > 50) logs.value.pop();
+            };
+
+            const triggerCommand = (cmd) => {
+                addLog(`Executing command: ${cmd.toUpperCase()}...`, 'var(--accent-blue)');
+                if (socket) socket.emit('execute_command', { command: cmd, token: apiToken.value });
+                
+                // Demo-feedback för Runa
+                if(cmd === 'runa') addLog("ᚱᚢᚾᛅ: Stavar GUNNVOR i rött ljus.", 'var(--accent-red)');
+            };
+
+            const forceFletch = () => {
+                if(confirm("VARNING: Detta exekverar KOMMANDO 4 (Panic Mode). Allt mörkas. Fortsätt?")) {
+                    addLog("⚠️ EMERGENCY: FORCE SYSTEM FLETCH INITIATED.", 'var(--accent-red)');
+                    triggerCommand('4');
+                }
+            };
+
+            const pollMetrics = () => {
+                // Simulerar data-flöde om socket inte är aktiv
+                aiScore.value = Math.floor(85 + Math.random() * 14);
+                aurumPrice.value = Math.floor(26400 + Math.random() * 50);
+                recoveries.value = Math.floor(Math.random() * 3);
+                totalScans.value += Math.floor(Math.random() * 5);
+            };
+
+            onMounted(() => {
+                addLog("Dashboard initialized. System ready.");
+                
+                // Försök ansluta till din Docker-backend
+                try {
+                    socket = io('http://localhost:8080');
+                    socket.on('connect', () => {
+                        connected.value = true;
+                        addLog("Handshake complete with Rova Docker Backend.");
+                    });
+                    socket.on('disconnect', () => {
+                        connected.value = false;
+                        addLog("Connection lost. Retrying...", 'var(--accent-red)');
+                    });
+                } catch (e) {
+                    addLog("Socket provider not found. Running in demo mode.", 'var(--text-muted)');
+                }
+
+                setInterval(pollMetrics, 3000);
+            });
+
+            return {
+                apiToken, connected, aiScore, aurumPrice, 
+                recoveries, totalScans, logs, triggerCommand, forceFletch
+            }
+        }
+    }).mount('#app')
+</script>
+
+</body>
+</html>

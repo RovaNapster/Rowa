@@ -1,0 +1,26 @@
+version: '3.9'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    container_name: rova-nexus
+    ports:
+      - "5173:5173"
+      - "3000:3000"
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    command: npm run dev
+    develop:
+      watch:
+        - path: ./src
+          action: sync
+        - path: ./package.json
+          action: rebuild
+    stdin_open: true
+    tty: true

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Lidbema Overkill</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body {
+            background-color: #000;
+            color: var(--neon-cyan, #00FFFF);
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0; padding: 20px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;
+            overflow: hidden; text-shadow: 0 0 10px #00FFFF;
+        }
+        .fingerprint-btn {
+            background: transparent;
+            border: 2px solid #00FFFF;
+            color: #00FFFF;
+            padding: 20px 40px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 0 0 15px #00FFFF inset;
+            transition: all 0.2s;
+        }
+        .fingerprint-btn:active { background: #00FFFF; color: #000; }
+        #log { margin-top: 20px; width: 100%; white-space: pre-wrap; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+
+    <h1 id="statusText">AWAITING ARCHITECT FINGERPRINT</h1>
+    <button class="fingerprint-btn" onclick="triggerBoot()">[ AUTHENTICATE ]</button>
+    <div id="log"></div>
+
+    <script type="module">
+        import { generateMagicRoute } from './RouteOptimizer.js';
+        import { initiateOverkillProtocol } from './Rova_Overkill_Boot.js';
+
+        // Registrera PWA Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(() => console.log('[SYSTEM] PWA Service Worker Registered.'));
+        }
+
+        window.triggerBoot = async () => {
+            const logDiv = document.getElementById('log');
+            logDiv.innerText += "\n[*] Initiating Overkill Protocol...";
+            
+            try {
+                // Här anropas din brutala boot-sekvens från Rova_Overkill_Boot.js
+                // Eftersom vi inte har dina RovaCorp-bibliotek i denna demo, simulerar vi trycket:
+                if (navigator.vibrate) navigator.vibrate([30, 50, 30, 50, 500, 1500]);
+                
+                document.getElementById('statusText').innerText = "ZON 3 IS YOURS.";
+                document.body.style.boxShadow = "inset 0 0 100px #00FFFF";
+                
+                logDiv.innerText += "\n[✅] WELCOME, J_ROVA.";
+                
+                // Testa Ruttoptimeraren
+                const testOrders = [
+                    { item: 'Olja', shelfLocation: 'A0112' },
+                    { item: 'Filter', shelfLocation: 'A0112' },
+                    { item: 'Bult', shelfLocation: 'B0210' }
+                ];
+                const route = generateMagicRoute(testOrders);
+                logDiv.innerText += `\n[⚡ MAGI] Rutt optimerad. Grupperat på hyllor:\n${JSON.stringify(route, null, 2)}`;
+                
+            } catch (e) {
+                document.body.style.backgroundColor = "red";
+                document.getElementById('statusText').innerText = "LOCKDOWN INITIATED";
+            }
+        };
+    </script>
+</body>
+</html>
